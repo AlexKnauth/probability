@@ -30,8 +30,14 @@
 (define (immhasheq/c kc vc)
   (and/c hash-eq? (hash/c kc vc #:immutable #t)))
 
+(define (muthasheq/c kc vc)
+  (and/c hash-eq? (hash/c kc vc #:immutable #f)))
+
 (define (immseteq/c c)
   (set/c c #:cmp 'eq #:kind 'immutable))
+
+(define (mutseteq/c c)
+  (set/c c #:cmp 'eq #:kind 'mutable))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
