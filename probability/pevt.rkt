@@ -19,6 +19,7 @@
          unstable/hash
          my-cond
          "probability.rkt"
+         "stuff.rkt"
          (for-syntax racket/base
                      syntax/parse
                      ))
@@ -27,22 +28,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define (immhasheq/c kc vc)
-  (and/c hash-eq? (hash/c kc vc #:immutable #t)))
-
-(define (muthasheq/c kc vc)
-  (and/c hash-eq? (hash/c kc vc #:immutable #f)))
-
-(define (muthasheq . args)
-  (hash-copy (apply hasheq args)))
-
-(define (hash->immhasheq hsh)
-  (make-immutable-hasheq (hash->list hsh)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; (struct pevt (get-p true-implies false-implies) ....)
-
+;; (struct pevt (get-p true-implies false-implies))
 ;; get-p : [(HashEqof Pevt Bool) -> Probability]
 ;; true-implies : (MutHashEqof Pevt Boolean)
 ;; false-implies : (MutHashEqof Pevt Boolean)
@@ -62,23 +48,26 @@
          (pevt get-p (muthasheq) (muthasheq))]
         [else (error '->pevt "expected pevtish?, given ~v" x)]))
 
-(define/contract (extend-hsh hsh)
-  [(immhasheq/c pevt? boolean?) . -> . (immhasheq/c pevt? boolean?)]
-  (define lst
-    (for/list ([(e b) (in-hash hsh)])
-      (match b
-        [#t (extend-hsh (hash->immhasheq (pevt-true-implies e)))]
-        [#f (extend-hsh (hash->immhasheq (pevt-false-implies e)))])))
-  (apply hash-union hsh lst
-         #:combine/key (lambda (k v1 v2)
-                         (cond [(eq? v1 v2) v1]
-                               [else #;(printf "extend-hsh: !!! k: ~v, v1: ~v, v2: ~v\n" k v1 v2) v2]
-                               ))))
+(define/contract (extend-given given)
+  [(or/c pevt? (immhasheq/c pevt? boolean?)) . -> . (immhasheq/c pevt? boolean?)]
+  (cond
+    [(pevt? given) (extend-given (hasheq given #t))]
+    [(hash? given)
+     (define lst
+       (for/list ([(e b) (in-hash given)])
+         (match b
+           [#t (extend-given (hash->immhasheq (pevt-true-implies e)))]
+           [#f (extend-given (hash->immhasheq (pevt-false-implies e)))])))
+     (apply hash-union given lst
+            #:combine/key (lambda (k v1 v2)
+                            (cond [(eq? v1 v2) v1]
+                                  [else "!!!" v2])))]
+    [else (error 'extend-given "expected (immhasheq/c pevt? boolean?), given: ~v" given)]))
 
 ;; get-p : Pevtish (HashEqof Pevt Boolean) -> Probability
 (define/contract (get-p e hsh)
   [pevtish? (immhasheq/c pevt? boolean?) . -> . probability?]
-  (let ([e (->pevt e)] [hsh (extend-hsh hsh)])
+  (let ([e (->pevt e)] [hsh (extend-given hsh)])
     (->pn
      (hash-ref hsh e
        (lambda ()
@@ -106,8 +95,8 @@
                                   (loop (cons (get-p e hsh) ps)
                                         (hash-set hsh e #t)
                                         (rest es)))])))
-                (hash-copy (for/hasheq ([e (in-list es)])
-                             (values e #t)))
+                (for/mhasheq ([e (in-list es)])
+                  (values e #t))
                 (muthasheq)))]))
 
 (define eor-proc
@@ -132,8 +121,8 @@
                                         (hash-set hsh e #f)
                                         (rest es)))])))
                 (muthasheq)
-                (hash-copy (for/hasheq ([e (in-list es)])
-                             (values e #f)))))]))
+                (for/mhasheq ([e (in-list es)])
+                  (values e #f))))]))
 
 (define (eif*-proc ce te ee)
   (let ([ce (->pevt ce)] [te (->pevt te)] [ee (->pevt ee)])
@@ -165,7 +154,7 @@
       (with-check-info*
        (list (make-check-actual a)
              (make-check-expected b)
-             (make-check-info '∆ ∆))
+             (make-check-info 'ok-∆ ∆))
        (lambda ()
          (check-= a b ∆)))))
   (define-simple-macro (defre id:id ...)
@@ -246,7 +235,7 @@
     (rep
      (defre a b)
      (check-e∆ (eor a b) (enot (eand (enot a) (enot b))) 2.3e-16)
-     (check-e∆ (eand a b) (enot (eor (enot a) (enot b))) 2.0e-16)))
+     (check-e∆ (eand a b) (enot (eor (enot a) (enot b))) 2.1e-16)))
   (test-case "eif*"
     (rep
      (defre e1 e2 e3)
