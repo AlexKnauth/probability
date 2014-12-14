@@ -33,20 +33,20 @@
 (define (muthasheq/c kc vc)
   (and/c hash-eq? (hash/c kc vc #:immutable #f)))
 
-(define (immseteq/c c)
-  (set/c c #:cmp 'eq #:kind 'immutable))
+(define (muthasheq . args)
+  (hash-copy (apply hasheq args)))
 
-(define (mutseteq/c c)
-  (set/c c #:cmp 'eq #:kind 'mutable))
+(define (hash->immhasheq hsh)
+  (make-immutable-hasheq (hash->list hsh)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; (struct pevt (deps get-p true-implies false-implies) ....)
-;; deps : (SetEqof Pevt)
+;; (struct pevt (get-p true-implies false-implies) ....)
+
 ;; get-p : [(HashEqof Pevt Bool) -> Probability]
-;; true-implies : (HashEqof Pevt Bool)
-;; false-implies : (HashEqof Pevt Bool)
-(struct pevt (deps get-p true-implies false-implies)) ; opaque
+;; true-implies : (MutHashEqof Pevt Boolean)
+;; false-implies : (MutHashEqof Pevt Boolean)
+(struct pevt (get-p true-implies false-implies)) ; opaque
 
 (define (pevtish? x)
   (or (pevt? x)
@@ -59,31 +59,20 @@
         [(probability? x)
          (define n (->pn x))
          (define (get-p _) n)
-         (pevt (seteq) get-p (hasheq) (hasheq))]
+         (pevt get-p (muthasheq) (muthasheq))]
         [else (error '->pevt "expected pevtish?, given ~v" x)]))
-
-;; dep-member? : Pevt (U Pevt (SetEqof Pevt)) -> Boolean
-(define/contract (dep-member? p set)
-  [pevt? (or/c pevt? (immseteq/c pevt?)) . -> . boolean?]
-  (cond [(pevt? set)
-         (or (eq? p set)
-             (dep-member? p (pevt-deps set)))]
-        [(generic-set? set) (for/or ([s (in-set set)])
-                              (dep-member? p s))]
-        [else
-         (error 'dep-member? "expected (or/c pevt? (set/c pevt?)), given ~v" set)]))
 
 (define/contract (extend-hsh hsh)
   [(immhasheq/c pevt? boolean?) . -> . (immhasheq/c pevt? boolean?)]
   (define lst
     (for/list ([(e b) (in-hash hsh)])
       (match b
-        [#t (extend-hsh (pevt-true-implies e))]
-        [#f (extend-hsh (pevt-false-implies e))])))
+        [#t (extend-hsh (hash->immhasheq (pevt-true-implies e)))]
+        [#f (extend-hsh (hash->immhasheq (pevt-false-implies e)))])))
   (apply hash-union hsh lst
          #:combine/key (lambda (k v1 v2)
                          (cond [(eq? v1 v2) v1]
-                               [else #;(printf "extend-hsh: !!! k: ~v, v1: ~v, v2: ~v\n" k v1 v2) #f]
+                               [else #;(printf "extend-hsh: !!! k: ~v, v1: ~v, v2: ~v\n" k v1 v2) v2]
                                ))))
 
 ;; get-p : Pevtish (HashEqof Pevt Boolean) -> Probability
@@ -93,53 +82,45 @@
     (->pn
      (hash-ref hsh e
        (lambda ()
-         (match-define (pevt deps get-p true-implies false-implies) e)
-         (define deps-hsh
-           (cond [(or (hash-empty? hsh) (set-empty? deps)) (hasheq)]
-                 [else (for/hasheq ([(k v) (in-hash hsh)]
-                                    #:when (dep-member? k e))
-                         (values k v))]))
-         (get-p deps-hsh))))))
+         (match-define (pevt get-p true-implies false-implies) e)
+         (get-p hsh))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (enot e)
   (let ([e (->pevt e)])
-    (pevt (seteq e)
-          (lambda (hsh)
+    (pevt (lambda (hsh)
             (pnot (get-p e hsh)))
-          (hasheq e #f)
-          (hasheq e #t))))
+          (muthasheq e #f)
+          (muthasheq e #t))))
 
 (define eand-proc
   (case-lambda
     [() (->pevt 1)]
     [(e) (->pevt e)]
     [es (let ([es (map ->pevt es)])
-          (pevt (apply seteq es)
-                (lambda (hsh)
+          (pevt (lambda (hsh)
                   (let loop ([ps '()] [hsh hsh] [es es])
                     (cond [(empty? es) (apply pand (reverse ps))]
                           [else (let ([e (first es)])
                                   (loop (cons (get-p e hsh) ps)
                                         (hash-set hsh e #t)
                                         (rest es)))])))
-                (for/hasheq ([e (in-list es)])
-                  (values e #t))
-                (hasheq)))]))
+                (hash-copy (for/hasheq ([e (in-list es)])
+                             (values e #t)))
+                (muthasheq)))]))
 
 (define eor-proc
   (case-lambda
     [() (->pevt 0)]
     [(e) (->pevt e)]
     [(e1 e2) (let ([e1 (->pevt e1)] [e2 (->pevt e2)])
-               (pevt (seteq e1 e2)
-                     (lambda (hsh)
+               (pevt (lambda (hsh)
                        (+ (get-p e1 hsh)
                           (get-p e2 hsh)
                           (- (get-p (eand e1 e2) hsh))))
-                     (hasheq)
-                     (hasheq e1 #f e2 #f)))]
+                     (muthasheq)
+                     (muthasheq e1 #f e2 #f)))]
     [(e1 . rst) (eor e1 (apply eor rst))]
     [es (let ([es (map ->pevt es)])
           (pevt (apply seteq es)
@@ -150,20 +131,18 @@
                                   (loop (cons (get-p e hsh) ps)
                                         (hash-set hsh e #f)
                                         (rest es)))])))
-                (hasheq)
-                (for/hasheq ([e (in-list es)])
-                  (values e #f))))]))
+                (muthasheq)
+                (hash-copy (for/hasheq ([e (in-list es)])
+                             (values e #f)))))]))
 
 (define (eif*-proc ce te ee)
   (let ([ce (->pevt ce)] [te (->pevt te)] [ee (->pevt ee)])
-    (pevt (seteq ce te ee)
-          (lambda (hsh)
-            (let* ([cp (get-p ce hsh)]
-                   [tp (get-p te (hash-set hsh ce #t))]
-                   [ep (get-p ee (hash-set hsh ce #f))])
-              (pif* cp tp ep)))
-          (hasheq)
-          (hasheq))))
+    (pevt (lambda (hsh)
+            (pif* (get-p ce hsh)
+                  (get-p te (hash-set hsh ce #t))
+                  (get-p ee (hash-set hsh ce #f))))
+          (muthasheq)
+          (muthasheq))))
 
 (define eand eand-proc)
 (define eor eor-proc)
@@ -199,12 +178,11 @@
     (check-equal? (get-p e (hasheq e #t)) 1)
     (check-equal? (get-p e (hasheq e #f)) 0)
     (define e2
-      (pevt (seteq e)
-            (lambda (hsh)
+      (pevt (lambda (hsh)
               (match (get-p e hsh)
                 [1 3/4] [0 5/7] [1/2 1/17]))
-            (hasheq)
-            (hasheq)))
+            (muthasheq)
+            (muthasheq)))
     (check-equal? (get-p e2 (hasheq)) 1/17)
     (check-equal? (get-p e2 (hasheq e2 #t)) 1)
     (check-equal? (get-p e2 (hasheq e2 #f)) 0)
@@ -313,7 +291,7 @@
                          [1 (hasheq e3 #f)] [_ (hasheq)]))
        (define e1.false-implies (hash-union !e1->e2 !e1->e3))
        (define p1 (random))
-       (define e1 (pevt (seteq) (lambda (hsh) p1) e1.true-implies e1.false-implies))
+       (define e1 (pevt (lambda (hsh) p1) (hash-copy e1.true-implies) (hash-copy e1.false-implies)))
        (define p2 (get-p e2 (hasheq e1 #t)))
        (define p3 (get-p e3 (hasheq e1 #f)))
        (define p-if1then2else3
