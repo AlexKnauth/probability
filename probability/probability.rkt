@@ -69,12 +69,12 @@
 
 (define (pif*-proc-ish cp tp ep)
   (let* ([cp (->pn cp)] [tp (->pn tp)] [ep (->pn ep)] [!cp (->pn (pnot cp))])
-    ;#;#;[]
+    #;#;[]
     (/ (+ (* cp tp) (* !cp ep))
        (+ cp !cp))
-    #;#;[]
-    (por (pand cp tp)
-         (pand !cp ep))
+    ;#;#;[]
+    (+ (pand cp tp)
+       (pand !cp ep))
     ))
 
 (begin-for-syntax
@@ -227,8 +227,8 @@
      (check-p∆ (pif* p1 p2 p2) p2 1.2e-16)
      (check-p= (pif* p1 p2 0) (pand p1 p2))
      (check-p∆ (pif* p1 1 p2) (por p1 p2) 2.3e-16)
-     ;(check-p= (ppif p1 p2 1) (por (pand p1 p2) (pand (pnot p1) 1)))
-     ;(check-p= (ppif p1 p2 p3) (por (pand p1 p2) (pand (pnot p1) p3)))
+     (check-p= (pif* p1 p2 1) (+ (pand p1 p2) (pand (pnot p1) 1)))
+     (check-p= (pif* p1 p2 p3) (+ (pand p1 p2) (pand (pnot p1) p3)))
      )
     (check-p= (pif* 1/2 1 0) 1/2)
     (check-p= (pif* 2/3 1 0) 2/3)

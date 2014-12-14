@@ -75,9 +75,10 @@
         [#t (extend-hsh (pevt-true-implies e))]
         [#f (extend-hsh (pevt-false-implies e))])))
   (apply hash-union hsh lst
-         #:combine (lambda (v1 v2)
-                     (cond [(eq? v1 v2) v1]
-                           [else (error 'extend-hsh "!!!")]))))
+         #:combine/key (lambda (k v1 v2)
+                         (cond [(eq? v1 v2) v1]
+                               [else #;(printf "extend-hsh: !!! k: ~v, v1: ~v, v2: ~v\n" k v1 v2) #f]
+                               ))))
 
 ;; get-p : Pevtish (HashEqof Pevt Boolean) -> Probability
 (define/contract (get-p e hsh)
@@ -125,6 +126,15 @@
   (case-lambda
     [() (->pevt 0)]
     [(e) (->pevt e)]
+    [(e1 e2) (let ([e1 (->pevt e1)] [e2 (->pevt e2)])
+               (pevt (seteq e1 e2)
+                     (lambda (hsh)
+                       (+ (get-p e1 hsh)
+                          (get-p e2 hsh)
+                          (- (get-p (eand e1 e2) hsh))))
+                     (hasheq)
+                     (hasheq e1 #f e2 #f)))]
+    [(e1 . rst) (eor e1 (apply eor rst))]
     [es (let ([es (map ->pevt es)])
           (pevt (apply seteq es)
                 (lambda (hsh)
@@ -251,8 +261,8 @@
   (test-case "(a || b) = !(!a && !b)"
     (rep
      (defre a b)
-     (check-e= (eor a b) (enot (eand (enot a) (enot b))))
-     (check-e∆ (eand a b) (enot (eor (enot a) (enot b))) 1.2e-16)))
+     (check-e∆ (eor a b) (enot (eand (enot a) (enot b))) 2.3e-16)
+     (check-e∆ (eand a b) (enot (eor (enot a) (enot b))) 2.0e-16)))
   (test-case "eif*"
     (rep
      (defre e1 e2 e3)
@@ -261,15 +271,10 @@
      (check-e∆ (eif* e1 e2 e2) e2 1.2e-16)
      (check-e= (eif* e1 e2 0) (eand e1 e2))
      (check-e∆ (eif* e1 1 e2) (eor e1 e2) 2.3e-16)
-     ;(check-e= (eif* e1 e2 1)
-     ;          (eor (eand e1 e2)
-     ;               (eand (enot e1) 1)))
-     ;(check-e= (eif* e1 e2 e3)
-     ;          (let ([!e1 (enot e1)]
-     ;                [!e2 (enot e2)]
-     ;                [e1&e2 (eand e1 e2)])
-     ;            (eor (eand e1 e2)
-     ;                 (eand (enot (eor e1 e2)) e3))))
+     (check-e= (eif* e1 e2 e3)
+               (let ([!e1 (enot e1)])
+                 (eor (eand e1 e2)
+                      (eand !e1 e3))))
      (check-e= (eif* e1 e1 0) e1)
      (check-e∆ (eif* e1 e1 e2) (eor e1 e2) 2.3e-16)
      (check-e= (eif* e1 0 e1) 0)
@@ -279,15 +284,9 @@
      (check-e= (eif* e1 e1 (enot e1)) 1)
      (check-e= (eif* (enot e1) e1 (enot e1)) 0)
      (check-e= (eand e1 e2) (eif* e1 e2 0))
-     (check-e∆ (eor e1 e2) (eif* e1 1 e2) 2.2e-16)
+     (check-e∆ (eor e1 e2) (eif* e1 1 e2) 2.3e-16)
      (check-e= (enot e1) (eif* e1 0 1))
-     (check-e= e1 (eif* e1 1 0))
-     (check-e∆ (eor (eand e1 e2)
-                    (eand (enot e1) e3))
-               (eif* (eif* e1 e2 0)
-                     1
-                     (eif* e1 0 e3))
-               2.3e-16))
+     (check-e= e1 (eif* e1 1 0)))
     (test-case "eif* thing"
       (define n 1e6)
       (define ∆ 1.6e-3)
