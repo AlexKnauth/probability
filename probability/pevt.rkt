@@ -48,6 +48,12 @@
          (pevt get-p (muthasheq) (muthasheq))]
         [else (error '->pevt "expected pevtish?, given ~v" x)]))
 
+(define (pevt/deps get-p true-implies false-implies add-deps!)
+  (define r
+    (pevt get-p true-implies false-implies))
+  (add-deps! r)
+  r)
+
 (define/contract (extend-given given [already-seen (seteq)])
   [(or/c pevt? (immhasheq/c pevt? boolean?)) . -> . (immhasheq/c pevt? boolean?)]
   (cond
@@ -79,66 +85,66 @@
 
 (define (enot e)
   (let ([e (->pevt e)])
-    (define r
-      (pevt (lambda (hsh)
-              (pnot (get-p e hsh)))
-            (muthasheq e #f)
-            (muthasheq e #t)))
-    (hash-set! (pevt-true-implies e) r #f)
-    (hash-set! (pevt-false-implies e) r #t)
-    r))
+    (pevt/deps
+     (lambda (hsh)
+       (pnot (get-p e hsh)))
+     (muthasheq e #f)
+     (muthasheq e #t)
+     (lambda (this)
+       (hash-set! (pevt-true-implies e) this #f)
+       (hash-set! (pevt-false-implies e) this #t)))))
 
 (define eand-proc
   (case-lambda
     [() (->pevt 1)]
     [(e) (->pevt e)]
     [es (let ([es (map ->pevt es)])
-          (define r
-            (pevt (lambda (hsh)
-                    (let loop ([ps '()] [hsh hsh] [es es])
-                      (cond [(empty? es) (apply pand (reverse ps))]
-                            [else (let ([e (first es)])
-                                    (loop (cons (get-p e hsh) ps)
-                                          (hash-set hsh e #t)
-                                          (rest es)))])))
-                  (for/mhasheq ([e (in-list es)])
-                    (values e #t))
-                  (muthasheq)))
-          (for ([e (in-list es)])
-            (hash-set! (pevt-false-implies e) r #f))
-          r)]))
+          (pevt/deps
+           (lambda (hsh)
+             (let loop ([ps '()] [hsh hsh] [es es])
+               (cond [(empty? es) (apply pand (reverse ps))]
+                     [else (let ([e (first es)])
+                             (loop (cons (get-p e hsh) ps)
+                                   (hash-set hsh e #t)
+                                   (rest es)))])))
+           (for/mhasheq ([e (in-list es)])
+             (values e #t))
+           (muthasheq)
+           (lambda (this)
+             (for ([e (in-list es)])
+               (hash-set! (pevt-false-implies e) this #f)))))]))
 
 (define eor-proc
   (case-lambda
     [() (->pevt 0)]
     [(e) (->pevt e)]
     [(e1 e2) (let ([e1 (->pevt e1)] [e2 (->pevt e2)])
-               (define r
-                 (pevt (lambda (hsh)
-                         (+ (get-p e1 hsh)
-                            (get-p e2 hsh)
-                            (- (get-p (eand e1 e2) hsh))))
-                       (muthasheq)
-                       (muthasheq e1 #f e2 #f)))
-               (hash-set! (pevt-true-implies e1) r #t)
-               (hash-set! (pevt-true-implies e2) r #t)
-               r)]
+               (pevt/deps
+                (lambda (hsh)
+                  (+ (get-p e1 hsh)
+                     (get-p e2 hsh)
+                     (- (get-p (eand e1 e2) hsh))))
+                (muthasheq)
+                (muthasheq e1 #f e2 #f)
+                (lambda (this)
+                  (hash-set! (pevt-true-implies e1) this #t)
+                  (hash-set! (pevt-true-implies e2) this #t))))]
     [(e1 . rst) (eor e1 (apply eor rst))]
     [es (let ([es (map ->pevt es)])
-          (define r
-            (pevt (lambda (hsh)
-                    (let loop ([ps '()] [hsh hsh] [es es])
-                      (cond [(empty? es) (apply por (reverse ps))]
-                            [else (let ([e (first es)])
-                                    (loop (cons (get-p e hsh) ps)
-                                          (hash-set hsh e #f)
-                                          (rest es)))])))
-                  (muthasheq)
-                  (for/mhasheq ([e (in-list es)])
-                    (values e #f))))
-          (for ([e (in-list es)])
-            (hash-set! (pevt-true-implies e) r #t))
-          r)]))
+          (pevt/deps
+           (lambda (hsh)
+             (let loop ([ps '()] [hsh hsh] [es es])
+               (cond [(empty? es) (apply por (reverse ps))]
+                     [else (let ([e (first es)])
+                             (loop (cons (get-p e hsh) ps)
+                                   (hash-set hsh e #f)
+                                   (rest es)))])))
+           (muthasheq)
+           (for/mhasheq ([e (in-list es)])
+             (values e #f))
+           (lambda (this)
+             (for ([e (in-list es)])
+               (hash-set! (pevt-true-implies e) this #t)))))]))
 
 (define (eif*-proc ce te ee)
   (let ([ce (->pevt ce)] [te (->pevt te)] [ee (->pevt ee)])
