@@ -156,9 +156,14 @@
           (muthasheq)
           (muthasheq))))
 
+(define (e=*-proc e1 e2)
+  (let ([e1 (->pevt e1)] [e2 (->pevt e2)])
+    (eif* e1 e2 (enot e2))))
+
 (define eand eand-proc)
 (define eor eor-proc)
 (define eif* eif*-proc)
+(define e=* e=*-proc)
 
 ;; make-choice-events : Natural -> (Listof Pevt)
 ;; returns n equally likely mutually exclusive events, where exactly one will be true
@@ -338,6 +343,21 @@
                   (if (random-boolean/probability p3) 1 0)))
             n))
        (check-e∆ (eif* e1 e2 e3) p-if1then2else3 ∆))))
+  (test-case "e=*"
+    (check-e= (e=* 1 1) 1)
+    (check-e= (e=* 0 0) 1)
+    (check-e= (e=* 1/2 1) 1/2)
+    (check-e= (e=* 1/2 0) 1/2)
+    (check-e= (e=* 1/2 1/2) 1/2)
+    (check-e= (e=* 1 0) 0)
+    (check-e= (e=* 0 1) 0)
+    (rep
+     (defre e1 e2)
+     (check-e= (e=* e1 e1) 1)
+     (check-e= (e=* e1 (enot e1)) 0)
+     (check-e∆ (e=* e1 e2) (e=* (enot e1) (enot e2)) 1.2e-16)
+     (check-e= (e=* e1 e2) (eor (eand e1 e2) (eand (enot e1) (enot e2))))
+     (check-e∆ (e=* e1 e2) (eor (eand e1 e2) (enot (eor e1 e2))) 2.3e-16)))
   (test-case "make-choice-events"
     (test-case "(make-choice-events 0)"
       (check-equal? (make-choice-events 0) '()))
@@ -372,4 +392,25 @@
       ;(check-e= (eif* (eand (enot e2) (enot e3)) 0 (enot e1)) 2/3)
       (check-e= (get-p e1 (hasheq e2 #f)) 1/2)
       (check-e= (get-p e1 (hasheq e2 #f e3 #f)) 1)))
+  (test-case "Monty Hall probability"
+    (match-define (list pz=a pz=b pz=c) (make-choice-events 3))
+    (match-define (list c1=a c1=b c1=c) (make-choice-events 3))
+    (define sh=a (eand (enot pz=a) (eor c1=b c1=c)))
+    (define sh=b (eand (enot pz=b) (eor c1=a c1=c)))
+    (define sh=c (eand (enot pz=c) (eor c1=a c1=b)))
+    (match-define (list stick switch) (make-choice-events 2))
+    (define c2=a (eor (eand c1=a stick)
+                      (eand c1=b sh=c switch)
+                      (eand c1=c sh=b switch)))
+    (define c2=b (eor (eand c1=b stick)
+                      (eand c1=a sh=c switch)
+                      (eand c1=c sh=a switch)))
+    (define c2=c (eor (eand c1=c stick)
+                      (eand c1=a sh=b switch)
+                      (eand c1=b sh=a switch)))
+    (define c2=pz (eor (eand pz=a c2=a)
+                       (eand pz=b c2=b)
+                       (eand pz=c c2=c)))
+    (check-e= (get-p c2=pz (hasheq stick #t)) 1/3)
+    (check-e= (get-p c2=pz (hasheq switch #t)) 2/3))
   )
