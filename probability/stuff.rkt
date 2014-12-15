@@ -2,7 +2,9 @@
 
 (provide (all-defined-out))
 
-(require racket/contract/base
+(require racket/list
+         racket/set
+         racket/contract/base
          )
 
 (define (immhasheq/c kc vc)
@@ -20,4 +22,8 @@
 (define-syntax-rule
   (for/mhasheq (for-clause ...) body ...)
   (hash-copy (for/hasheq (for-clause ...) body ...)))
+
+(define (set-add* s vs)
+  (cond [(empty? vs) s]
+        [else (set-add* (set-add s (first vs)) (rest vs))]))
 
