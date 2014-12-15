@@ -126,8 +126,7 @@
     [(e1 . rst) (eor e1 (apply eor rst))]
     [es (let ([es (map ->pevt es)])
           (define r
-            (pevt (apply seteq es)
-                  (lambda (hsh)
+            (pevt (lambda (hsh)
                     (let loop ([ps '()] [hsh hsh] [es es])
                       (cond [(empty? es) (apply por (reverse ps))]
                             [else (let ([e (first es)])
@@ -252,7 +251,7 @@
     (rep
      (defre a b)
      (check-e∆ (eor a b) (enot (eand (enot a) (enot b))) 2.3e-16)
-     (check-e∆ (eand a b) (enot (eor (enot a) (enot b))) 2.1e-16)))
+     (check-e∆ (eand a b) (enot (eor (enot a) (enot b))) 2.2e-16)))
   (test-case "eif*"
     (rep
      (defre e1 e2 e3)
