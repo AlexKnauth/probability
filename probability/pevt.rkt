@@ -15,6 +15,7 @@
          racket/match
          racket/contract/base
          racket/contract/region
+         racket/promise
          syntax/parse/define
          unstable/hash
          my-cond
@@ -159,6 +160,31 @@
 (define eor eor-proc)
 (define eif* eif*-proc)
 
+;; make-choice-events : Natural -> (Listof Pevt)
+;; returns n equally likely mutually exclusive events, where exactly one will be true
+(define (make-choice-events n)
+  (define lst
+    (for/list ([this.i (in-range n)])
+      (define others
+        (delay (for/list ([i (in-range n)] [other (in-list lst)] #:unless (= i this.i))
+                 other)))
+      (define (get-p hsh)
+        (cond [(for/or ([other (in-list (force others))])
+                 (hash-ref hsh other #f))
+               0]
+              [else
+               (define num-false
+                 (for/sum ([other (in-list (force others))])
+                   (match (hash-ref hsh other #t)
+                     [#t 0] [#f 1])))
+               (/ (- n num-false))]))
+      (pevt get-p (muthasheq) (muthasheq))))
+  (for ([e (in-list lst)] [e.i (in-range n)])
+    (define e.true-implies (pevt-true-implies e))
+    (for ([i (in-range n)] [other (in-list lst)] #:unless (= i e.i))
+      (hash-set! e.true-implies other #f)))
+  lst)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (module+ test
@@ -257,7 +283,7 @@
     (rep
      (defre a b)
      (check-e∆ (eor a b) (enot (eand (enot a) (enot b))) 2.3e-16)
-     (check-e∆ (eand a b) (enot (eor (enot a) (enot b))) 2.2e-16)))
+     (check-e∆ (eand a b) (enot (eor (enot a) (enot b))) 2.3e-16)))
   (test-case "eif*"
     (rep
      (defre e1 e2 e3)
@@ -312,4 +338,35 @@
                   (if (random-boolean/probability p3) 1 0)))
             n))
        (check-e∆ (eif* e1 e2 e3) p-if1then2else3 ∆))))
+  (test-case "make-choice-events"
+    (test-case "(make-choice-events 0)"
+      (check-equal? (make-choice-events 0) '()))
+    (test-case "(make-choice-events 1)"
+      (match-define (list e1) (make-choice-events 1))
+      (check-e= e1 1))
+    (test-case "(make-choice-events 2)"
+      (match-define (list e1 e2) (make-choice-events 2))
+      (check-e= e1 1/2) (check-e= e2 1/2)
+      (check-e= (eand e1 e2) 0)
+      (check-e= (eor e1 e2) 1)
+      (check-e= (eand e1 (enot e2)) e1)
+      (check-e= (eor e1 (enot e2)) e1)
+      (check-e= (get-p e1 (hasheq e2 #f)) 1)
+      (check-e= (get-p e2 (hasheq e1 #f)) 1)
+      (check-e= (get-p e1 (hasheq e2 #t)) 0)
+      (check-e= (get-p e2 (hasheq e1 #t)) 0))
+    (test-case "(make-choice-events 3)"
+      (match-define (list e1 e2 e3) (make-choice-events 3))
+      (check-e= e1 1/3) (check-e= e2 1/3) (check-e= e3 1/3)
+      (check-e= (eand e1 e2) 0) (check-e= (eand e2 e3) 0) (check-e= (eand e1 e3) 0)
+      (check-e= (eand e2 e1) 0) (check-e= (eand e3 e2) 0) (check-e= (eand e3 e1) 0)
+      (check-e= (eor e1 e2 e3) 1)
+      (check-e= (eor e1 e2) 2/3) (check-e= (eor e2 e3) 2/3) (check-e= (eor e1 e2) 2/3)
+      (check-e= (eor e2 e1) 2/3) (check-e= (eor e3 e2) 2/3) (check-e= (eor e2 e1) 2/3)
+      (check-e= (eand e1 (eor e2 e3)) 0)
+      (check-e= (eand (enot e1) (eor e2 e3)) 2/3)
+      (check-e= (eand (enot e1) e2) 1/3)
+      ;(check-e= (eand (eor e2 e3) (enot e1)) 2/3)
+      (check-e= (get-p e1 (hasheq e2 #f)) 1/2)
+      (check-e= (get-p e1 (hasheq e2 #f e3 #f)) 1)))
   )
