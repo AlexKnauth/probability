@@ -315,7 +315,7 @@
      (check-e= e1 (eif* e1 1 0)))
     (test-case "eif* thing"
       (define n 1e6)
-      (define ∆ 1.6e-3)
+      (define ∆ 1.7e-3)
       (rep
        (define e2 (->pevt (random))) (define e3 (->pevt (random)))
        (define e1->e2 (match (random 4)
@@ -391,7 +391,16 @@
       ;(check-e= (eif* (eor e2 e3) (enot e1) 0) 2/3)
       ;(check-e= (eif* (eand (enot e2) (enot e3)) 0 (enot e1)) 2/3)
       (check-e= (get-p e1 (hasheq e2 #f)) 1/2)
-      (check-e= (get-p e1 (hasheq e2 #f e3 #f)) 1)))
+      (check-e= (get-p e1 (hasheq e2 #f e3 #f)) 1)
+      (check-e= (get-p (eor e2 e3) (hasheq e1 #f)) 1))
+    (test-case "(make-choice-events 4)"
+      (match-define (list e1 e2 e3 e4) (make-choice-events 4))
+      (for ([e (in-list (list e1 e2 e3 e4))])
+        (check-e= e 1/4))
+      (for ([e (in-list (list e2 e3 e4))])
+        (check-e= (get-p e (hasheq e1 #t)) 0)
+        (check-e= (get-p e (hasheq e1 #f)) 1/3))
+      (check-e= (get-p (eor e2 e3 e4) (hasheq e1 #f)) 1)))
   (test-case "Monty Hall probability"
     (match-define (list pz=a pz=b pz=c) (make-choice-events 3))
     (match-define (list c1=a c1=b c1=c) (make-choice-events 3))
