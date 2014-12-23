@@ -4,8 +4,13 @@
 
 (require racket/list
          racket/set
+         racket/sequence
          racket/contract/base
-         )
+         (for-syntax racket/base
+                     ))
+
+(define-syntax (.... stx)
+  #'(error "...."))
 
 (define (immhasheq/c kc vc)
   (and/c hash-eq? (hash/c kc vc #:immutable #t)))
@@ -26,4 +31,8 @@
 (define (set-add* s vs)
   (cond [(empty? vs) s]
         [else (set-add* (set-add s (first vs)) (rest vs))]))
+
+(define (sequence-member? v s [is-equal? equal?])
+  (define (v? x) (is-equal? x v))
+  (sequence-ormap v? s))
 

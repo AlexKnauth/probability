@@ -24,8 +24,11 @@
                      syntax/parse
                      racket/syntax
                      ))
+(module+ test-stuff
+  (require rackunit)
+  (provide (all-defined-out) (all-from-out rackunit)))
 (module+ test
-  (require rackunit))
+  (require (submod ".." test-stuff)))
 
 (define (probability-number? x)
   (and (real? x) (<= 0 x 1)))
@@ -150,7 +153,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(module+ test
+(module+ test-stuff
   (define-check (check-p= actual expected)
     (check-equal? (->pn actual) (->pn expected)))
   (define-check (check-p∆ actual expected ∆)
@@ -158,7 +161,8 @@
   (define-simple-macro (defrp id:id ...)
     (begin (define id (random)) ...))
   (define-simple-macro (rep body ...+)
-    (for ([i (in-range 50)]) body ...))
+    (for ([i (in-range 50)]) body ...)))
+(module+ test
   (test-case "pnot"
     (check-p= (pnot 1) 0)
     (check-p= (pnot 0) 1)
@@ -180,6 +184,7 @@
     (check-p= (pand 1/2 1/2) 1/4)
     (check-p= (pand 1/2 1/3) 1/6)
     (check-p= (pand 1/12 1/5) 1/60)
+    (check-p= (pand 2/3 2/3) 4/9)
     (check-p= (pand-expt 1 2) 1)
     (check-p= (pand-expt 1/2 2) 1/4)
     (check-p= (pand-expt 1/2 3) 1/8)

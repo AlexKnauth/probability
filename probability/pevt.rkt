@@ -16,6 +16,7 @@
          racket/contract/base
          racket/contract/region
          racket/promise
+         racket/lazy-require
          syntax/parse/define
          unstable/hash
          my-cond
@@ -24,8 +25,14 @@
          (for-syntax racket/base
                      syntax/parse
                      ))
+(module+ test-stuff
+  (require rackunit)
+  (provide (all-defined-out) (all-from-out rackunit)))
 (module+ test
-  (require rackunit))
+  (require (submod ".." test-stuff)))
+
+(lazy-require
+ ["randvar.rkt" (extend-given given/c)])
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -55,26 +62,9 @@
   (add-deps! r)
   r)
 
-(define/contract (extend-given given [already-seen (seteq)])
-  [(or/c pevt? (immhasheq/c pevt? boolean?)) . -> . (immhasheq/c pevt? boolean?)]
-  (cond
-    [(pevt? given) (extend-given (hasheq given #t) already-seen)]
-    [(hash? given)
-     (define new-already-seen (set-add* already-seen (hash-keys given)))
-     (define lst
-       (for/list ([(e b) (in-hash given)] #:when (not (set-member? already-seen e)))
-         (match b
-           [#t (extend-given (hash->immhasheq (pevt-true-implies e)) new-already-seen)]
-           [#f (extend-given (hash->immhasheq (pevt-false-implies e)) new-already-seen)])))
-     (apply hash-union given lst
-            #:combine/key (lambda (k v1 v2)
-                            (cond [(eq? v1 v2) v1]
-                                  [else "!!!" v2])))]
-    [else (error 'extend-given "expected (immhasheq/c pevt? boolean?), given: ~v" given)]))
-
 ;; get-p : Pevtish (HashEqof Pevt Boolean) -> Probability
 (define/contract (get-p e hsh)
-  [pevtish? (immhasheq/c pevt? boolean?) . -> . probability?]
+  [pevtish? given/c . -> . probability?]
   (let ([e (->pevt e)] [hsh (extend-given hsh)])
     (->pn
      (hash-ref hsh e
@@ -192,7 +182,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(module+ test
+(module+ test-stuff
   (define-check (check-e= actual expected)
     (let ([a (->pn (get-p actual (hasheq)))]
           [e (->pn (get-p expected (hasheq)))])
@@ -213,7 +203,8 @@
   (define-simple-macro (defre id:id ...)
     (begin (define id (->pevt (random))) ...))
   (define-simple-macro (rep body ...+)
-    (for ([i (in-range 50)]) body ...))
+    (for ([i (in-range 50)]) body ...)))
+(module+ test
   (test-case "get-p"
     (define e (->pevt 1/2))
     (check-equal? (get-p e (hasheq)) 1/2)
