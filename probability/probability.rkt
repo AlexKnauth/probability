@@ -72,12 +72,10 @@
 
 (define (pif*-proc-ish cp tp ep)
   (let* ([cp (->pn cp)] [tp (->pn tp)] [ep (->pn ep)] [!cp (->pn (pnot cp))])
-    #;#;[]
-    (/ (+ (* cp tp) (* !cp ep))
-       (+ cp !cp))
-    ;#;#;[]
-    (+ (pand cp tp)
-       (pand !cp ep))
+    ;(/ (+ (* cp tp) (* !cp ep)) ; weighted average, but it simplifies to the one below
+    ;   (+ cp !cp))              ; (+ cp !cp) = 1
+    (+ (pand cp tp)   ; which is also sort of the same as (or (and c t) (and !c e))
+       (pand !cp ep)) ; because c and !c are mutually exclusive
     ))
 
 (begin-for-syntax

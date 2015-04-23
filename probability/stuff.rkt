@@ -12,11 +12,20 @@
 (define-syntax (.... stx)
   #'(error "...."))
 
+(define (true? x)
+  (if x #t #f))
+
+(define (flatten* . args)
+  (flatten args))
+
+(define (flatten*/rem-dups . args)
+  (remove-duplicates (flatten args)))
+
 (define (immhasheq/c kc vc)
-  (and/c hash-eq? (hash/c kc vc #:immutable #t)))
+  (and/c hash? hash-eq? (hash/c kc vc #:immutable #t)))
 
 (define (muthasheq/c kc vc)
-  (and/c hash-eq? (hash/c kc vc #:immutable #f)))
+  (and/c hash? hash-eq? (hash/c kc vc #:immutable #f)))
 
 (define (muthasheq . args)
   (hash-copy (apply hasheq args)))
