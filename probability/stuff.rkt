@@ -45,3 +45,7 @@
   (define (v? x) (is-equal? x v))
   (sequence-ormap v? s))
 
+(define (hash-remove* hsh ks)
+  (for/fold ([hsh hsh]) ([k (in-list ks)])
+    (hash-remove hsh k)))
+
